@@ -33,7 +33,7 @@ sum(is.na(df))
 
 La línea devuelve 0, lo que quiere decir que no hay ningún valor NA en el dataset.
 
-## Split de datos
+### Split de datos
 
 Los datos contienen la columna `Set`, la cual indica la separación del dataset en conjuntos de entrenamiento, y en conjuntos de validación:
 
@@ -47,3 +47,5 @@ Esto significa que el conjunto de datos fue separado aproximadamente en:
 
 - 75% para datos de entrenamiento
 - 25% para datos de validación
+
+## Clasificador
