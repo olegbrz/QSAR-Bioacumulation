@@ -24,3 +24,26 @@ df <- read.csv('dataset.csv', fileEncoding = 'UTF-8-BOM')
 ```
 
 Se ha tenido que usar la función `read.csv` y no `read.csv2` ya que la primera soporta la codificación del dataset, la cual UTF-8 con BOM, propia de software de Microsoft.
+
+Para comprobar si existen valores NA en el dataset:
+
+```{r}
+sum(is.na(df))
+```
+
+La línea devuelve 0, lo que quiere decir que no hay ningún valor NA en el dataset.
+
+## Split de datos
+
+Los datos contienen la columna `Set`, la cual indica la separación del dataset en conjuntos de entrenamiento, y en conjuntos de validación:
+
+```{r}
+sum(df$Set == "Train")/length(df$Set)
+sum(df$Set == "Test")/length(df$Set)
+
+```
+
+Esto significa que el conjunto de datos fue separado aproximadamente en:
+
+- 75% para datos de entrenamiento
+- 25% para datos de validación
