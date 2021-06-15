@@ -15,6 +15,8 @@ Para realizar una implementación de arboles de decision en R, se necesita la li
 
 ```{r}
 library(rpart)
+library(hier.part)
+library(pROC)
 ```
 
 ## Datos
@@ -33,19 +35,177 @@ sum(is.na(df))
 
 La línea devuelve 0, lo que quiere decir que no hay ningún valor NA en el dataset.
 
-### Split de datos
-
-Los datos contienen la columna `Set`, la cual indica la separación del dataset en conjuntos de entrenamiento, y en conjuntos de validación:
-
 ```{r}
-sum(df$Set == "Train")/length(df$Set)
-sum(df$Set == "Test")/length(df$Set)
+df$SMILES <- NULL
+df$Set <- NULL
+df$logBCF <- NULL
 
+row.names(df) <- df$CAS
+df$CAS <- NULL
+df$Class <- as.factor(df$Class)
+
+df$B02.C.N. <- as.logical(df$B02.C.N.)
+df$F04.C.O. <- as.logical(df$F04.C.O.)
 ```
 
-Esto significa que el conjunto de datos fue separado aproximadamente en:
 
-- 75% para datos de entrenamiento
-- 25% para datos de validación
 
 ## Clasificador
+
+Definiciones de funciones: 
+
+```{r}
+# Función de entrenamiento
+train.rpart <- function (datos)
+{
+  # La última columna del conjunto de datos es la variable dependiente
+  m <- length(names(datos))
+  combinaciones <- combos(m - 1)
+  var.dep <- names(datos)[m]
+  
+  n <- dim(combinaciones$ragged)[1]
+  cadenas <- 1:n
+  for (i in 1:n)
+  {
+    # Construimos cadenas con las fórmulas
+    form.cad <- paste(var.dep, "~", paste(names(datos)[combinaciones$ragged[i, ]], collapse = "+"))
+    cadenas[i] <- form.cad
+  }
+  
+  # Construimos las fórmulas
+  formulas <- lapply(cadenas, as.formula)
+  
+  # Generamos los modelos (de 1 a 5 neuronas para cada fórmula)
+  datos.rpart <- datos
+  salida <- list()
+  for (i in 1:n)
+  {
+   
+     salida[[i]] <- rpart(formulas[[i]], data = datos.rpart)
+    
+  }
+  
+  return(salida)
+}
+```
+
+```{r}
+# Función de validación
+validate.rpart <- function (modelos, datos)
+{
+  datos.rpart <- datos
+  predicciones <- lapply(modelos, predict, newdata = datos.rpart)
+  
+  n <- length(predicciones)
+  acc.mejor <- 0
+  roc.mejor <- NULL
+  for (i in 1:n)
+  {
+    p <- predicciones[[i]]
+    for (j in 1:length(p[,1])) {
+      prediccion <- p[j,]
+      maximo <- max(prediccion)
+      prediccion <- as.integer(prediccion == maximo)
+    }
+  
+    acc.actual <- sum(datos$Class == prediccion) / dim(datos)[1]
+    
+    # Si el valor de ACC es mejor lo guardamos como solución
+    if(acc.actual > acc.mejor)
+    {
+      acc.mejor <- acc.actual
+      modelo.mejor.acc <- modelos[[i]]
+    }
+    
+    # Calculamos el area bajo la curva ROC
+    roc.actual <- roc(datos$Class, prediccion,quiet = TRUE)
+    
+    # Si el valor de AUC es mejor lo guardamos como solución
+    if (is.null(roc.mejor) || roc.actual$auc[1] > roc.mejor$auc[1])
+    {
+      roc.mejor <- roc.actual
+      modelo.mejor.auc <- modelos[[i]]
+    }
+  }
+  
+  return(list(modelo.acc = modelo.mejor.acc, modelo.auc = modelo.mejor.auc))
+}
+```
+
+```{r}
+# Función de prueba
+test.rpart <- function (modelo, datos)
+{
+  datos.rpart <- datos
+  datos.rpart$recid <- class.ind(datos.rpart$recid)
+  prediccion <- predict(modelo, datos.rpart)
+ 
+ 
+  prediccion[prediccion >= 0.5] <- 1
+  prediccion[prediccion < 0.5] <- 0
+  
+  valor.acc <- sum(datos$recid == prediccion) / dim(datos)[1]
+  valor.roc <- roc(datos$recid, prediccion,quiet = TRUE)
+  
+  return(list(acc = valor.acc, roc = valor.roc))
+}
+```
+
+
+## Particionamiento
+
+Con el siguiente chunk el dataframe se particiona en los tres conjuntos:
+
+```{r}
+spec = c(train = .6, test = .2, validate = .2)
+
+g = sample(cut(
+  seq(nrow(df)), 
+  nrow(df)*cumsum(c(0,spec)),
+  labels = names(spec)
+))
+
+df.split = split(df, g)
+```
+
+Para comprobar que se ha particionado de forma correcta:
+
+```{r}
+length(df.split$train$Class)/length(df$Class)
+length(df.split$test$Class)/length(df$Class)
+length(df.split$validate$Class)/length(df$Class)
+```
+```{r}
+df.train <- df.split$train
+df.test <- df.split$test
+df.validate <- df.split$validate
+```
+
+## Entrenamiento
+
+```{r}
+models <- train.rpart(df.train)
+```
+
+
+## Validación
+
+```{r}
+models.best <- validate.rpart(models, df.validate)
+
+models.best.acc <- models.best$modelo.acc
+models.best.auc <- models.best$modelo.auc
+```
+
+
+## Test
+
+```{r}
+metrics <- test.rpart(models.best.acc, df.test)
+
+acc <- metrics$acc
+metrics <- probarrpart(modelo.mejor.auc, datos.test)
+auc <- metrics$roc$auc[1]
+acc
+```
+
